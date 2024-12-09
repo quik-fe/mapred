@@ -1,0 +1,72 @@
+{
+  "name": "@quik-fe/mapred",
+  "version": "1.0.0",
+  "description": "A lightweight multi-threaded MapReduce implementation based on Node.js Worker Threads.",
+  "source": "src/main.ts",
+  "main": "dist/main.umd.js",
+  "module": "dist/main.module.mjs",
+  "unpkg": "dist/main.umd.js",
+  "types": "./dist/main.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "require": "./dist/main.js",
+      "default": "./dist/main.modern.mjs"
+    },
+    "./src/*": "./src/*"
+  },
+  "keywords": [
+    "mapred",
+    "mapreducer"
+  ],
+  "files": [
+    "src/**/*.ts",
+    "dist/**.js*",
+    "dist/**.mjs*",
+    "dist/**/*.ts"
+  ],
+  "scripts": {
+    "build-dts": "rollup -c rollup.dts.config.js",
+    "build-js": "microbundle --define process.env.NODE_ENV=production,PKG_VERSION=$npm_package_version --target node --compress false",
+    "build": "pnpm build-js && pnpm build-dts",
+    "watch": "microbundle watch --define process.env.NODE_ENV=development,PKG_VERSION=$npm_package_version --target node --compress false",
+    "dev": "pnpm watch",
+    "start": "pnpm build",
+    "prepack": "rm -rf dist && pnpm run build",
+    "test": "jest"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quik-fe/mapred.git"
+  },
+  "author": "zhzluke96",
+  "bugs": {
+    "url": "https://github.com/quik-fe/mapred/issues"
+  },
+  "homepage": "https://github.com/quik-fe/mapred#readme",
+  "devDependencies": {
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^22.10.1",
+    "lodash-es": "^4.17.21",
+    "microbundle": "^0.15.1",
+    "tslib": "^2.8.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "eventemitter3": "^5.0.1",
+    "rollup": "^4.28.1",
+    "rollup-plugin-dts": "^6.1.1"
+  },
+  "browserslist": [
+    "maintained node versions",
+    "last 2 versions",
+    "not dead",
+    "not ie 11"
+  ]
+}
