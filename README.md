@@ -1,0 +1,2 @@
+# mapred
+MapReduce for nodejs
