@@ -1,6 +1,6 @@
 {
   "name": "@quik-fe/mapred",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A lightweight multi-threaded MapReduce implementation based on Node.js Worker Threads.",
   "source": "src/main.ts",
   "main": "dist/main.umd.js",
