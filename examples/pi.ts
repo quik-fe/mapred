@@ -39,4 +39,5 @@ mapReducer.mapReduce(new Array(10_000).fill(1_000_000)).then((result) => {
   console.log("π ≈", result[0].result);
 });
 
-// console.log((mapReducer as any).make_reducer_worker_code());
+// DEBUG
+// console.log((mapReducer as any).make_worker_code());

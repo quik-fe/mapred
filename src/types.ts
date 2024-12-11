@@ -1,17 +1,24 @@
-export interface WorkerData<T, M> {
+export type WorkerID = string & {};
+export interface WorkerData<T = any> {
+  worker_id: WorkerID;
+  type: "map" | "reduce";
+  data: T;
+}
+
+export interface MapperData<T, M> {
+  worker_id: WorkerID;
   batch: T[];
-  worker_id: number;
 
   fn: (data: T) => M | Promise<M>;
 }
-export interface ReducerData<T> {
+export interface ReducerData<T, M> {
+  worker_id: WorkerID;
   batch: T[];
-  worker_id: number;
 
   fn: (
     batch: T[],
     progress: (p: { index: number; total: number }) => void
-  ) => T[] | Promise<T[]>;
+  ) => M[] | Promise<M[]>;
 }
 export type KeyFn<T> = (data: T) => string | number;
 export type SortFn<T> = (a: T, b: T) => number;
@@ -22,4 +29,3 @@ export type ReducerFn<T, R> = (
   batch: T[],
   progress: ProgressFn
 ) => R | Promise<R>;
-export type WorkerID = string & {};

@@ -5,103 +5,13 @@ import {
   KeyFn,
   MapperFn,
   ProgressData,
-  ReducerData,
   ReducerFn,
   SortFn,
-  WorkerData,
   WorkerID,
+  WorkerData,
 } from "./types";
 import { getFirstKeyOfType, IdGen, toDataUrl } from "./misc";
-
-const worker_polyfill = `
-/**
- * noop
- */
-`;
-
-async function port_handlers(worker_id: number) {
-  // NOTE: 这个需要写在函数体里面，因为顶层导入有可能被打包重命名
-  const { parentPort } = await new Function(
-    "x",
-    `return import("worker_threads")`
-  )();
-  if (!parentPort) {
-    throw new Error("No parent port");
-  }
-  const pt0 = parentPort;
-  return {
-    onError(err: unknown) {
-      pt0.postMessage({
-        type: "error",
-        worker_id,
-        message: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-      });
-    },
-    onProgress(message: { index: number; total: number }) {
-      pt0.postMessage({
-        type: "progress",
-        worker_id,
-        index: message.index,
-        total: message.total,
-      });
-    },
-    onDone(message: { result: any[] }) {
-      pt0.postMessage({
-        type: "result",
-        worker_id,
-        result: message.result,
-      });
-    },
-  };
-}
-
-export async function mapper_worker<T, M>(data: WorkerData<T, M>) {
-  let { batch, worker_id, fn } = data;
-
-  if (typeof fn === "string") {
-    const build = new Function("fn", `return (${fn});`);
-    fn = build(fn);
-  }
-
-  const { onError, onProgress, onDone } = await port_handlers(worker_id);
-  const results = [] as M[];
-  const progress = {
-    index: 0,
-    total: batch.length,
-  };
-  for (const data of batch) {
-    try {
-      const result = await fn(data);
-      results.push(result);
-      progress.index++;
-      onProgress(progress);
-    } catch (error) {
-      onError(error);
-    }
-  }
-  onDone({ result: results });
-  process.exit();
-}
-
-export async function reducer_worker<T>(data: ReducerData<T>) {
-  let { batch, worker_id, fn } = data;
-
-  if (typeof fn === "string") {
-    const build = new Function("fn", `return (${fn});`);
-    fn = build(fn);
-  }
-
-  const { onError, onProgress, onDone } = await port_handlers(worker_id);
-  try {
-    const results = await fn(batch, onProgress);
-    onDone({ result: results });
-  } catch (error) {
-    onError(error);
-  } finally {
-    process.exit();
-  }
-}
+import { make_worker_env } from "./worker";
 
 export class MapReducer<T, M, R> {
   static defaultSortFn(a: any, b: any) {
@@ -148,7 +58,7 @@ export class MapReducer<T, M, R> {
     WorkerID,
     {
       id: WorkerID;
-      workerData: WorkerData<T, M>;
+      workerData: WorkerData<T[]>;
       worker: Worker;
       progress: ProgressData;
     }
@@ -214,10 +124,10 @@ export class MapReducer<T, M, R> {
 
       if (is_mapper) {
         data.mapper.index += info.progress.index;
-        data.mapper.total += info.workerData.batch.length;
+        data.mapper.total += info.workerData.data.length;
       } else {
         data.reduce.index += info.progress.index;
-        data.reduce.total += info.workerData.batch.length;
+        data.reduce.total += info.workerData.data.length;
       }
 
       data.workers.push({
@@ -232,7 +142,7 @@ export class MapReducer<T, M, R> {
   protected warp_worker<RET>(
     worker: Worker,
     worker_id: WorkerID,
-    workerData: WorkerData<T, M>
+    workerData: WorkerData<T[]>
   ) {
     const worker_info = {
       id: worker_id,
@@ -240,7 +150,7 @@ export class MapReducer<T, M, R> {
       worker,
       progress: {
         index: 0,
-        total: workerData.batch.length,
+        total: workerData.data.length,
       },
     };
     this.worker_infos.set(worker_id, worker_info);
@@ -283,7 +193,11 @@ export class MapReducer<T, M, R> {
     const batches = this.split(data);
     const mappers = batches.map((batch) => {
       const id = this.idg.next() + "_mapper";
-      const { worker, workerData } = this.create_mapper_worker(batch, id);
+      const { worker, workerData } = this.create_worker({
+        worker_id: id,
+        data: batch,
+        type: "map",
+      });
       return this.warp_worker<M[]>(worker, id, workerData);
     });
     const mapped = await Promise.all(
@@ -295,10 +209,11 @@ export class MapReducer<T, M, R> {
     const grouped = this.combine(mapped);
     const reducers = grouped.map((group) => {
       const id = this.idg.next() + "_reducer";
-      const { worker, workerData } = this.create_reducer_worker(
-        group.items,
-        id
-      );
+      const { worker, workerData } = this.create_worker({
+        data: group.items,
+        worker_id: id,
+        type: "reduce",
+      });
       return this.warp_worker<R>(worker, id, workerData);
     });
     const result = await Promise.all(
@@ -339,25 +254,15 @@ export class MapReducer<T, M, R> {
     }));
   }
 
-  protected make_worker_code_base(code: string) {
+  protected make_worker_code() {
     return `
-import { Worker, parentPort, workerData } from "worker_threads";
-${worker_polyfill};
-${port_handlers.toString()};
-${code}
+${make_worker_env()};
+
+const mapFn = (${this.serialize_func(this.mapper)});
+const reduceFn = (${this.serialize_func(this.reducer)});
+
+define({ mapFn, reduceFn });
   `.trim();
-  }
-
-  protected make_reducer_worker_code() {
-    return this.make_worker_code_base(
-      `(${reducer_worker.toString()})(workerData);`
-    );
-  }
-
-  protected make_mapper_worker_code() {
-    return this.make_worker_code_base(
-      `(${mapper_worker.toString()})(workerData);`
-    );
   }
 
   protected serialize_func(func: Function) {
@@ -375,33 +280,12 @@ ${code}
     return `function ${serialized}`;
   }
 
-  protected create_worker(workerData: any, code: string) {
+  protected create_worker(workerData: WorkerData) {
+    const code = this.make_worker_code();
     const worker = new Worker(toDataUrl(code), {
       workerData,
     });
     return { worker, workerData };
-  }
-
-  protected create_mapper_worker(batch: T[], worker_id: WorkerID) {
-    return this.create_worker(
-      {
-        batch,
-        worker_id,
-        fn: this.serialize_func(this.mapper),
-      },
-      this.make_mapper_worker_code()
-    );
-  }
-
-  protected create_reducer_worker(batch: M[], worker_id: WorkerID) {
-    return this.create_worker(
-      {
-        batch,
-        worker_id,
-        fn: this.serialize_func(this.reducer),
-      },
-      this.make_reducer_worker_code()
-    );
   }
 
   protected split(data: T[]): T[][] {
