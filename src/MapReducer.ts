@@ -1,17 +1,9 @@
 import { Worker } from "worker_threads";
 import { cpus } from "os";
 import { EventEmitter } from "eventemitter3";
-import {
-  KeyFn,
-  MapperFn,
-  ProgressData,
-  ReducerFn,
-  SortFn,
-  WorkerID,
-  WorkerData,
-} from "./types";
-import { getFirstKeyOfType, IdGen, toDataUrl } from "./misc";
-import { make_worker_env } from "./worker";
+import { KeyFn, ProgressData, SortFn, WorkerID, WorkerData } from "./types";
+import { getFirstKeyOfType, IdGen } from "./misc";
+import { MapRedWorker } from "./types";
 
 export class MapReducer<T, M, R> {
   static defaultSortFn(a: any, b: any) {
@@ -51,8 +43,7 @@ export class MapReducer<T, M, R> {
 
   protected keyFn: KeyFn<T>;
   protected sortFn: SortFn<M>;
-  protected mapper: MapperFn<T, M>;
-  protected reducer: ReducerFn<M, R>;
+  protected worker: MapRedWorker;
 
   protected worker_infos = new Map<
     WorkerID,
@@ -86,22 +77,19 @@ export class MapReducer<T, M, R> {
   constructor({
     keyFn = () => "task",
     sortFn = MapReducer.defaultSortFn,
-    mapper,
-    reducer,
+    worker,
 
     poll_size = cpus().length,
   }: {
     keyFn?: KeyFn<T>;
     sortFn?: SortFn<M>;
-    reducer: ReducerFn<M, R>;
-    mapper: MapperFn<T, M>;
+    worker: MapRedWorker;
 
     poll_size?: number;
   }) {
     this.keyFn = keyFn;
     this.sortFn = sortFn;
-    this.mapper = mapper;
-    this.reducer = reducer;
+    this.worker = worker;
 
     this.poll_size = poll_size;
   }
@@ -142,7 +130,7 @@ export class MapReducer<T, M, R> {
   protected warp_worker<RET>(
     worker: Worker,
     worker_id: WorkerID,
-    workerData: WorkerData<T[]>
+    workerData: WorkerData<any[]>
   ) {
     const worker_info = {
       id: worker_id,
@@ -193,11 +181,12 @@ export class MapReducer<T, M, R> {
     const batches = this.split(data);
     const mappers = batches.map((batch) => {
       const id = this.idg.next() + "_mapper";
-      const { worker, workerData } = this.create_worker({
-        worker_id: id,
+      const workerData = {
         data: batch,
+        worker_id: id,
         type: "map",
-      });
+      } as const;
+      const worker = this.worker.create(workerData);
       return this.warp_worker<M[]>(worker, id, workerData);
     });
     const mapped = await Promise.all(
@@ -209,11 +198,12 @@ export class MapReducer<T, M, R> {
     const grouped = this.combine(mapped);
     const reducers = grouped.map((group) => {
       const id = this.idg.next() + "_reducer";
-      const { worker, workerData } = this.create_worker({
+      const workerData = {
         data: group.items,
         worker_id: id,
         type: "reduce",
-      });
+      } as const;
+      const worker = this.worker.create(workerData);
       return this.warp_worker<R>(worker, id, workerData);
     });
     const result = await Promise.all(
@@ -252,40 +242,6 @@ export class MapReducer<T, M, R> {
       key,
       items,
     }));
-  }
-
-  protected make_worker_code() {
-    return `
-${make_worker_env()};
-
-const mapFn = (${this.serialize_func(this.mapper)});
-const reduceFn = (${this.serialize_func(this.reducer)});
-
-define({ mapFn, reduceFn });
-  `.trim();
-  }
-
-  protected serialize_func(func: Function) {
-    const serialized = func.toString();
-    if (serialized.startsWith("function")) {
-      return serialized;
-    }
-    if (serialized.startsWith("(")) {
-      return serialized;
-    }
-    if (serialized.startsWith("async")) {
-      return serialized;
-    }
-    // object attribute
-    return `function ${serialized}`;
-  }
-
-  protected create_worker(workerData: WorkerData) {
-    const code = this.make_worker_code();
-    const worker = new Worker(toDataUrl(code), {
-      workerData,
-    });
-    return { worker, workerData };
   }
 
   protected split(data: T[]): T[][] {

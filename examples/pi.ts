@@ -1,8 +1,9 @@
 import { MapReducer } from "../src/main";
+import { FuncWorker } from "../src/MapRedWorker";
 
-const mapReducer = new MapReducer({
+const worker = new FuncWorker({
   // Map: Generate random points and check if they are inside unit circle
-  mapper(points: number) {
+  map(points: number) {
     let inside = 0;
     for (let i = 0; i < points; i++) {
       const x = Math.random() * 2 - 1;
@@ -13,12 +14,13 @@ const mapReducer = new MapReducer({
   },
 
   // Reduce: Calculate π from all results
-  reducer(results) {
+  reduce(results) {
     const total = results.reduce((a, b) => a + b.inside, 0);
     const points = results.reduce((a, b) => a + b.total, 0);
     return 4 * (total / points);
   },
 });
+const mapReducer = new MapReducer({ worker });
 
 mapReducer.events.on("progress", (progress) => {
   const { mapper, reduce } = progress;

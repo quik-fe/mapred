@@ -1,3 +1,5 @@
+import type { Worker } from "worker_threads";
+
 export type WorkerID = string & {};
 export interface WorkerData<T = any> {
   worker_id: WorkerID;
@@ -29,3 +31,6 @@ export type ReducerFn<T, R> = (
   batch: T[],
   progress: ProgressFn
 ) => R | Promise<R>;
+export interface MapRedWorker {
+  create(workerData: WorkerData): Worker;
+}

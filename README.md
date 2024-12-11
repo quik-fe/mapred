@@ -19,12 +19,18 @@ npm install @quik-fe/mapred
 ## Constructor Options
 
 ```typescript
-new MapReducer({
+new FuncWorker<T,M,R>({
   // Required: Map function that processes each input item
   mapper: (data: T) => M | Promise<M>,
-  
   // Required: Reduce function that combines mapped results
   reducer: (batch: M[], progress: ProgressFn) => R | Promise<R>,
+});
+
+new ScriptWorker("./your_worker_script.js|ts");
+
+new MapReducer({
+  // Required: threads worker define.
+  worker: MapRedWorker,
   
   // Optional: Group results by key before reducing (default: () => "task")
   keyFn?: (data: T) => string | number,
@@ -43,11 +49,12 @@ new MapReducer({
 import { MapReducer } from '@quik-fe/mapred'
 
 // 1. Define mapper and reducer
-const mapper = (x: number) => x * 2
-const reducer = (nums: number[]) => nums.reduce((a, b) => a + b)
+const map = (x: number) => x * 2
+const reduce = (nums: number[]) => nums.reduce((a, b) => a + b)
 
 // 2. Create instance
-const mr = new MapReducer({ mapper, reducer })
+const worker = new FuncWorker({ map, reduce })
+const mr = new MapReducer({ worker })
 
 // 3. Run computation
 const result = await mr.mapReduce([1,2,3,4,5])
@@ -56,7 +63,7 @@ const result = await mr.mapReduce([1,2,3,4,5])
 ## Example: Calculate π
 
 ```typescript
-const mapReducer = new MapReducer({
+const worker = new FuncWorker({
   // Map: Generate random points and check if they are inside unit circle
   mapper: async (points: number) => {
     let inside = 0;
@@ -75,10 +82,30 @@ const mapReducer = new MapReducer({
     return 4 * (total / points);
   }
 });
+const mapReducer = new MapReducer({worker});
 
 const result = await mapReducer.mapReduce(new Array(1000).fill(10000));
 console.log('π ≈', result[0].result);
 ```
+
+## Example: Script Worker
+worker.ts
+```ts
+import {define} from "@quik-fe/mapred";
+
+define({
+  map: (x: number) => x * 2,
+  reduce: (nums: number[]) => nums.reduce((a, b) => a + b)
+});
+```
+main.ts
+```ts
+import { MapReducer, ScriptWorker } from '@quik-fe/mapred';
+const worker = new ScriptWorker("./worker.ts");
+const mr = new MapReducer({ worker })
+const result = await mr.mapReduce([1,2,3,4,5])
+```
+
 
 ## License
 

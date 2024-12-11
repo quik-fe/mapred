@@ -90,22 +90,22 @@ export async function reducer_main<T, M>(data: ReducerData<T, M>) {
 }
 
 export async function define<T, M, R>({
-  mapFn,
-  reduceFn,
+  map,
+  reduce,
 }: {
-  mapFn: MapperData<T, M>["fn"];
-  reduceFn: ReducerData<M, R>["fn"];
+  map: MapperData<T, M>["fn"];
+  reduce: ReducerData<M, R>["fn"];
 }) {
   const { workerData } = await worker_threads();
   const { worker_id, data, type } = workerData as WorkerData;
 
   switch (type) {
     case "map": {
-      await mapper_main<T, M>({ worker_id, batch: data, fn: mapFn });
+      await mapper_main<T, M>({ worker_id, batch: data, fn: map });
       break;
     }
     case "reduce": {
-      await reducer_main<M, R>({ worker_id, batch: data, fn: reduceFn });
+      await reducer_main<M, R>({ worker_id, batch: data, fn: reduce });
       break;
     }
     default: {

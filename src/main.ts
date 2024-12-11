@@ -1,3 +1,4 @@
 export * from "./MapReducer";
-export * from "./types";
+export * from "./MapRedWorker";
 export * from "./worker";
+export * from "./types";
