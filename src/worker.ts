@@ -10,7 +10,7 @@ export function worker_threads(): Promise<WorkerThreadsModule> {
   return typeof __non_webpack_require__ === "function"
     ? new Function("", `return __non_webpack_require__("worker_threads")`)()
     : typeof require === "function"
-    ? new Function("", `return require("worker_threads")`)()
+    ? new Function("require", `return require("worker_threads")`)(require)
     : new Function("", `return import("worker_threads")`)();
 }
 
@@ -44,7 +44,7 @@ export async function message_channel(worker_id: WorkerID) {
         total: message.total,
       });
     },
-    onDone(message: { result: any[] }) {
+    onDone(message: { result: any }) {
       pt0.postMessage({
         type: "result",
         worker_id,

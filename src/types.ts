@@ -20,7 +20,7 @@ export interface ReducerData<T, M> {
   fn: (
     batch: T[],
     progress: (p: { index: number; total: number }) => void
-  ) => M[] | Promise<M[]>;
+  ) => M | Promise<M>;
 }
 export type KeyFn<T> = (data: T) => string | number;
 export type SortFn<T> = (a: T, b: T) => number;
